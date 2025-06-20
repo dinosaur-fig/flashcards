@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>イタリア語フラッシュカード</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="fabicon.png" type="image/png" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #e8f5e9, #fffde7);
+      margin: 0;
+    }
+    .card {
+      background: white;
+      padding: 2rem;
+      border-radius: 2rem;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 340px;
+      max-width: 90vw;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    .card h1 {
+      font-size: 2.2rem;
+      margin: 0.5rem 0;
+      color: #1b5e20;
+    }
+    .card p {
+      font-size: 1.2rem;
+      color: #4a4a4a;
+      margin-bottom: 1.2rem;
+    }
+    #counter {
+      font-size: 1rem;
+      color: #888;
+      margin-top: -0.5rem;
+      margin-bottom: 1rem;
+    }
+    button {
+      margin: 0.4rem;
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 0.6rem;
+      background-color: #388e3c;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    button:hover {
+      background-color: #1b5e20;
+    }
+    .toggle-mode {
+      background-color: #d32f2f; /* 赤 */
+      color: white; /* 文字白 */
+    }
+    .toggle-mode:hover {
+      background-color: #b71c1c; /* 濃い赤 */
+    }
+    .starred {
+      background-color: #d32f2f;
+      color: white;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="word">読み込み中...</h1>
+    <p id="translation">お待ちください</p>
+    <p id="counter">0 / 0</p>
+    <button id="playBtn">💭</button>
+    <button id="checkBtn">🌟 Check</button>
+    <button id="toggleBtn" class="toggle-mode">🌟 Checkだけ表示: OFF</button>
+    <br />
+    <button id="prevBtn">← 前へ</button>
+    <button id="nextBtn">次へ →</button>
+  </div>
+
+  <script>
+    let allCards = [];
+    let cards = [];
+    let currentIndex = 0;
+    let favorites = new Set(JSON.parse(localStorage.getItem("favorites") || "[]"));
+    let checkMode = false;
+
+    async function fetchData() {
+      const url = 'https://script.google.com/macros/s/AKfycbyB1xE5BSnzu5ZU4h_4en4iMv_Ll50Z8cVdDjUTqLOpDcwOrsvOZmMmXOSqV-Q2DtHv/exec?nocache=' + new Date().getTime();
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP Error! status: ${res.status}`);
+        const json = await res.json();
+
+        allCards = json.map(row => ({
+          word: row.word,
+          translation: row.translation
+        }));
+
+        cards = [...allCards];
+        if (cards.length === 0) {
+          document.getElementById("word").textContent = "カードが見つかりません";
+          return;
+        }
+
+        updateCard();
+        playAudio();
+      } catch (e) {
+        document.getElementById("word").textContent = "読み込みエラー";
+        document.getElementById("translation").textContent = "通信やスプレッドシートの設定を確認してください";
+        document.getElementById("counter").textContent = "";
+        console.error(e);
+      }
+    }
+
+    function updateCard() {
+      if (cards.length === 0) return;
+      document.getElementById("word").textContent = cards[currentIndex].word;
+      document.getElementById("translation").textContent = cards[currentIndex].translation;
+      updateCounter();
+      updateCheckButton();
+    }
+
+    function updateCounter() {
+      document.getElementById("counter").textContent = `${currentIndex + 1} / ${cards.length}`;
+    }
+
+    function updateCheckButton() {
+      const btn = document.getElementById("checkBtn");
+      const word = cards[currentIndex].word;
+      if (favorites.has(word)) {
+        btn.classList.add("starred");
+        btn.textContent = "🌟 Check中";
+      } else {
+        btn.classList.remove("starred");
+        btn.textContent = "🌟 Check";
+      }
+    }
+
+    function toggleFavorite() {
+      const word = cards[currentIndex].word;
+      if (favorites.has(word)) {
+        favorites.delete(word);
+      } else {
+        favorites.add(word);
+      }
+      localStorage.setItem("favorites", JSON.stringify([...favorites]));
+      updateCheckButton();
+    }
+
+    function toggleMode() {
+      checkMode = !checkMode;
+      const toggleBtn = document.getElementById("toggleBtn");
+
+      if (checkMode) {
+        cards = allCards.filter(card => favorites.has(card.word));
+        if (cards.length === 0) {
+          alert("🌟 Checkされた単語がありません！");
+          checkMode = false;
+          cards = [...allCards];
+        }
+        toggleBtn.textContent = "🌟 Checkだけ表示: ON";
+      } else {
+        cards = [...allCards];
+        toggleBtn.textContent = "🌟 Checkだけ表示: OFF";
+      }
+      currentIndex = 0;
+      updateCard();
+      playAudio();
+    }
+
+    function nextCard() {
+      if (cards.length === 0) return;
+      currentIndex = (currentIndex + 1) % cards.length;
+      updateCard();
+      playAudio();
+    }
+
+    function prevCard() {
+      if (cards.length === 0) return;
+      currentIndex = (currentIndex - 1 + cards.length) % cards.length;
+      updateCard();
+      playAudio();
+    }
+
+    function playAudio() {
+      if (cards.length === 0) return;
+      if (speechSynthesis.speaking) speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(cards[currentIndex].word);
+      utter.lang = 'it-IT';
+      speechSynthesis.speak(utter);
+    }
+
+    // イベント登録
+    document.getElementById('playBtn').addEventListener('click', playAudio);
+    document.getElementById('checkBtn').addEventListener('click', toggleFavorite);
+    document.getElementById('toggleBtn').addEventListener('click', toggleMode);
+    document.getElementById('nextBtn').addEventListener('click', nextCard);
+    document.getElementById('prevBtn').addEventListener('click', prevCard);
+
+    fetchData();
+  </script>
+</body>
+</html>
